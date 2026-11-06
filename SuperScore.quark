@@ -1,0 +1,11 @@
+(
+  name: "SuperScore",
+  summary: "Sisplaying proportional notation in SC",
+  author: "Claudio Panariello",
+  version: "0.1",
+  url: "https://github.com/claudiopanariello/SuperScore"
+  dependencies: [
+      "https://github.com/steinbergmedia/bravura",
+      "https://github.com/steinbergmedia/petaluma"
+  ]
+)
