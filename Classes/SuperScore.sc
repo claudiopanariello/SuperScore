@@ -18,7 +18,7 @@ SuperScore {
 	classvar musicFont = "Bravura";
 	classvar offsetY = 76; //<----------- IMPORTANT! For Bravura offsetY = 76; for Petaluma offsetY = 38
 
-	var <>midicents, <>rhythms, <>clefs, <>windowTitle, <>scale, <>defaultSpacing, <>forceAccidentals, <>showDurations, <>windowWidth, <>windowHeight, <>posX, <>posY, <>parent;
+	var <>midiNotes, <>rhythms, <>clefs, <>windowTitle, <>scale, <>defaultSpacing, <>forceAccidentals, <>showDurations, <>windowWidth, <>windowHeight, <>posX, <>posY, <>parent;
 	var <>window, <>userView;
 	var <>durations;
 	var <>staffPosition;
@@ -39,8 +39,8 @@ SuperScore {
 	var spaceInterline;
 	var smuflDictionary, accidentalForDeviation;
 
-	*new { |midicents = 60, rhythms = nil, clefs = \g, windowTitle = "Music Roll", scale = 1, defaultSpacing = 100, forceAccidentals = false, showDurations = true, windowWidth = 500, windowHeight = 500, posX = 600, posY = 300, parent = nil|
-		^super.newCopyArgs(midicents.asArray, rhythms, clefs, windowTitle, scale, defaultSpacing, forceAccidentals, showDurations, windowWidth, windowHeight, posX, posY, parent).init;
+	*new { |midiNotes = 60, rhythms = nil, clefs = \g, windowTitle = "Music Roll", scale = 1, defaultSpacing = 100, forceAccidentals = false, showDurations = true, windowWidth = 500, windowHeight = 500, posX = 600, posY = 300, parent = nil|
+		^super.newCopyArgs(midiNotes.asArray, rhythms, clefs, windowTitle, scale, defaultSpacing, forceAccidentals, showDurations, windowWidth, windowHeight, posX, posY, parent).init;
 	}
 
 	init {
@@ -61,8 +61,8 @@ SuperScore {
 			"Bravura font is missing. Please install from https://github.com/steinbergmedia/petaluma and restart SC".throw;
 		});
 
-		midicents = midicents.fixShape;
-		numStaves = midicents.shape[0];
+		midiNotes = midiNotes.fixShape;
+		numStaves = midiNotes.shape[0];
 		format("There are % staves in total.", numStaves).postln;
 		this.fixDurations;
 
@@ -76,7 +76,7 @@ SuperScore {
 		//auxLength = durations[auxMaxLength].collect({|i| i[2].abs}); //.sum*defaultSpacing;
 		("auxLength: "++auxLength).postln;
 
-		staffWidth = windowWidth.max(scale*midicents.shape.maxItem*defaultSpacing + 60);
+		staffWidth = windowWidth.max(scale*midiNotes.shape.maxItem*defaultSpacing + 60);
 		staffWidth.postln;
 		staffHeight = windowHeight.max(staffPosition+(4*spaceInterline*numStaves)+(distanceInBetweenStaves*numStaves))*scale;
 		this.createWindow(windowTitle);
@@ -104,12 +104,12 @@ SuperScore {
 	}
 
 	fixDurations {
-		//brutal way to create a rhythms array identical to midicents but filled with 1s (or the given value, only if it's ONE value)
+		//brutal way to create a rhythms array identical to midiNotes but filled with 1s (or the given value, only if it's ONE value)
 		if(rhythms.isNil or: {rhythms.size==0}, {
 			var auxValue = rhythms ?? 1;
 			rhythms = List.new;
 			numStaves.do({|n|
-				rhythms.add(midicents[n].collect({ auxValue }));
+				rhythms.add(midiNotes[n].collect({ auxValue }));
 			});
 			rhythms = rhythms.asArray;
 			rhythms.postln;
@@ -129,7 +129,7 @@ SuperScore {
 	renderMusic {
 		Pen.scale(scale, scale);
 		numStaves.do({|n|
-			var currentStave = midicents[n];
+			var currentStave = midiNotes[n];
 			var offsetStaff = n*(distanceInBetweenStaves);
 			var durs = durations[n].select({|item| item[1]==false}); //strip all the rests
 			this.drawStaff(offsetStaff, clefs[n]);
@@ -383,9 +383,9 @@ SuperScore {
 	// [6000, [6500, 6900, 7100], 8600]; ---> [6000 [6500 6900 7100] 8600]
 	exportPitchesToBach {
 		/*
-		var length = midicents.shape.last;
+		var length = midiNotes.shape.last;
 		var result = "[";
-		result = midicents.collect({|item, i|
+		result = midiNotes.collect({|item, i|
 		if(item.shape.isNil, {item, {}})
 
 		});
@@ -445,7 +445,7 @@ SuperScore {
 				var position = 0;
 				rhythms[n].do({ |d|
 					if(d < 0, { pitchExpanded.add(Rest()) },
-						{ pitchExpanded.add(midicents[n][position]); position = position + 1 })
+						{ pitchExpanded.add(midiNotes[n][position]); position = position + 1 })
 				});
 				("Durations for Pbind:   " ++ durExpanded).postln;
 				("Pithces expanded for Pbind: " ++ pitchExpanded.asArray).postln;
@@ -481,7 +481,7 @@ SuperScore {
 			var position = 0;
 			rhythms[n].do({ |d|
 				if(d < 0, { pitchExpanded.add(Rest()) },
-					{ pitchExpanded.add(midicents[n][position]); position = position + 1 })
+					{ pitchExpanded.add(midiNotes[n][position]); position = position + 1 })
 			});
 			// ("Durations for Pbind:   " ++ durExpanded).postln; // DEBUG
 			// ("Pithces expanded for Pbind: " ++ pitchExpanded.asArray).postln; // DEBUG
@@ -534,7 +534,7 @@ SuperScore {
 
 	setDefaultSpacing { |value|
 		defaultSpacing = value;
-		staffWidth = windowWidth.max(scale * midicents.shape.maxItem * defaultSpacing + 60);
+		staffWidth = windowWidth.max(scale * midiNotes.shape.maxItem * defaultSpacing + 60);
 		userView.bounds_(Rect(0, 0, staffWidth, staffHeight));
 		userView.refresh;
 	}
@@ -570,19 +570,19 @@ SuperScore {
 	// since a lot of preprocessing is done in .init and not in .renderMusic, I have to re-run a bunch of lines
 	// Not sure this is the best way to do it, but anyway, it works for now
 	updateMusic { |newPitches, newRhythms, newClefs|
-		midicents = newPitches ?? { midicents };
+		midiNotes = newPitches ?? { midiNotes };
 		rhythms   = newRhythms ?? { rhythms };
 		clefs     = (newClefs ?? { clefs }).asArray;
 		distanceInBetweenStaves = 100*(clefs.maxItem.asString.size);
 		if(clefs.size<numStaves, {clefs = clefs ++ (clefs.last!(numStaves-clefs.size))});
 		clefs = clefs.collect({|i| i.asString});
 
-		midicents = midicents.asArray.fixShape;
-		numStaves = midicents.shape[0];
+		midiNotes = midiNotes.asArray.fixShape;
+		numStaves = midiNotes.shape[0];
 
 		this.fixDurations;
 
-		staffWidth = windowWidth.max(scale * midicents.shape.maxItem * defaultSpacing + 60);
+		staffWidth = windowWidth.max(scale * midiNotes.shape.maxItem * defaultSpacing + 60);
 		staffHeight = windowHeight.max(staffPosition + (4 * spaceInterline * numStaves) + (distanceInBetweenStaves * numStaves)) * scale;
 		userView.bounds_(Rect(0, 0, staffWidth, staffHeight));
 
