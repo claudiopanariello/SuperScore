@@ -1,6 +1,6 @@
 # SuperScore
 
-> A A class for displaying proportional notation natively in SuperCollider.
+> A class for displaying proportional notation natively in SuperCollider.
 
 ## Quickstart
 
