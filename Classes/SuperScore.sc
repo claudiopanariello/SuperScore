@@ -566,6 +566,29 @@ SuperScore {
 		userView.refresh;
 	}
 
+	// get all the midinotes as array
+	getPitches {
+		^midiNotes;
+	}
+
+	// get all the rhythms as array
+	getRhythms {
+		^rhythms;
+	}
+
+	exportToOM {|fileName|
+		fileName = fileName ? windowTitle;
+		if (SuperOM.isNil) {
+			"SuperOM is missing. Please install from https://github.com/claudiopanariello/SuperOM".throw;
+		};
+
+		SuperOM.new.writeOMfile(
+			fileName: fileName++".omi",
+			midicents: this.getPitches*100, //default SuperOM is in midicents, while SuperScore is in midi
+			rhythmTree: this.getRhythms
+		)
+	}
+
 	// update with new music
 	// since a lot of preprocessing is done in .init and not in .renderMusic, I have to re-run a bunch of lines
 	// Not sure this is the best way to do it, but anyway, it works for now
