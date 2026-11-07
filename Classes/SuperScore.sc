@@ -12,6 +12,14 @@ Claudio Panariello
 Email: 	claudio@claudiopanariello.com
 URL:	https://claudiopanariello.com/
 
+
+TO DO (not necessarily in this order eheh):
+- Avoid collisions in chords
+- Play the roll from a given timestamp
+- Select a note from the GUI
+- Add dynamics! Noteheads gray scale?
+- Rethink everything in terms of Events ?
+
 **********************************************************************/
 
 SuperScore {
@@ -199,7 +207,12 @@ SuperScore {
 		*/
 		if(showDurations==true, {this.addDurationLine(posX, posY, currentDuration;)});
 
-		Pen.stringAtPoint(smuflDictionary[\noteShapeRoundBlack], (posX-7)@(posY-offsetY), Font(musicFont, 38), Color.black;);
+		Pen.stringAtPoint(
+			smuflDictionary[\noteShapeRoundBlack],
+			(posX-7)@(posY-offsetY),
+			Font(musicFont, 38),
+			Color.black;
+		);
 
 		// add ledger lines (if needed)
 		this.checkLedgerLine(inputNote, posX, posY);
@@ -235,7 +248,7 @@ SuperScore {
 		Pen.strokeColor_(Color.black);
 		Pen.width_(4);
 		Pen.line(
-			Point(posX-7, posY),
+			Point(posX, posY),
 			Point(posX-7+dur, posY);
 		);
 		Pen.stroke;
@@ -554,7 +567,7 @@ SuperScore {
 		userView.refresh;
 	}
 
-	// force show all accidentals
+	// set the view scale
 	setScale {|value|
 		scale = value;
 		userView.refresh;
