@@ -26,7 +26,7 @@ SuperScore {
 	classvar musicFont = "Bravura";
 	classvar offsetY = 76; //<----------- IMPORTANT! For Bravura offsetY = 76; for Petaluma offsetY = 38
 
-	var <>midiNotes, <>rhythms, <>clefs, <>windowTitle, <>scale, <>defaultSpacing, <>forceAccidentals, <>showDurations, <>windowWidth, <>windowHeight, <>posX, <>posY, <>parent;
+	var <>midiNotes, <>rhythms, <>clefs, <>windowTitle, <>scale, <>defaultSpacing, <>forceAccidentals, <>showDurations, <>showStems, <>windowWidth, <>windowHeight, <>posX, <>posY, <>parent;
 	var <>window, <>userView;
 	var <>durations;
 	var <>staffPosition;
@@ -47,8 +47,8 @@ SuperScore {
 	var spaceInterline;
 	var smuflDictionary, accidentalForDeviation;
 
-	*new { |midiNotes = 60, rhythms = nil, clefs = \g, windowTitle = "Music Roll", scale = 1, defaultSpacing = 100, forceAccidentals = false, showDurations = true, windowWidth = 500, windowHeight = 500, posX = 600, posY = 300, parent = nil|
-		^super.newCopyArgs(midiNotes.asArray, rhythms, clefs, windowTitle, scale, defaultSpacing, forceAccidentals, showDurations, windowWidth, windowHeight, posX, posY, parent).init;
+	*new { |midiNotes = 60, rhythms = nil, clefs = \g, windowTitle = "Music Roll", scale = 1, defaultSpacing = 100, forceAccidentals = false, showDurations = true, showStems = true, windowWidth = 500, windowHeight = 500, posX = 600, posY = 300, parent = nil|
+		^super.newCopyArgs(midiNotes.asArray, rhythms, clefs, windowTitle, scale, defaultSpacing, forceAccidentals, showDurations, showStems, windowWidth, windowHeight, posX, posY, parent).init;
 	}
 
 	init {
@@ -86,7 +86,6 @@ SuperScore {
 		staffWidth = windowWidth.max(scale*midiNotes.shape.maxItem*defaultSpacing + 60);
 		staffWidth.postln;
 		staffHeight = windowHeight.max(staffPosition+(4*spaceInterline*numStaves)+(distanceInBetweenStaves*numStaves))*scale;
-
 		this.loadSmuflDictionary;
 		this.buildGui;
 	}
@@ -215,7 +214,7 @@ SuperScore {
 		// add ledger lines (if needed)
 		this.checkLedgerLine(inputNote, posX, posY);
 		this.addAccidental(deviation, posX, posY, prevNotePosY);
-		this.addStem(posX, posY, prevNotePosYchord);
+		if(showStems==true, {this.addStem(posX, posY, prevNotePosYchord)});
 
 		prevNote = inputNote;
 		prevNotePosX = posX;
@@ -574,6 +573,12 @@ SuperScore {
 	// show the duration lines
 	setShowDurations {|boolean|
 		showDurations = boolean;
+		userView.refresh;
+	}
+
+	// show or not the stems
+	setShowStems {|boolean|
+		showStems = boolean;
 		userView.refresh;
 	}
 
