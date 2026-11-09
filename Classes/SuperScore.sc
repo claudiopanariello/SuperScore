@@ -5,7 +5,8 @@
 ▗▄▄▞▘▝▚▄▞▘▐▌   ▐▙▄▄▖▐▌ ▐▌▗▄▄▞▘▝▚▄▄▖▝▚▄▞▘▐▌ ▐▌▐▙▄▄▖
 
 
-SuperScore: displaying proportional notation natively in SC (something similar to a maxmsp bach.roll)
+SupercolliderSCoreNotationAssistant (SuperScore)
+Displaying proportional notation natively in SC (something similar to a maxmsp bach.roll)
 
 Class started on 2026-03 (but first code done in 2025)
 Claudio Panariello
@@ -52,13 +53,14 @@ SuperScore {
 	}
 
 	init {
-		var auxMaxLength, auxLength;
+		//var auxMaxLength, auxLength;
 		staffPosition = 200;
 		spaceInterline = 10;
 		toneDivision = 8; // or 16 for 96TET, etc.
 		majorScale = Scale.major.degrees*(toneDivision*0.5);
 
-		MIDIClient.init;
+		MIDIClient.initialized.not.if { MIDIClient.init };
+		MIDIIn.connectAll;
 
 		if(Font.availableFonts.includesEqual("Bravura") == false, {
 			"Bravura font is missing. Please install from https://github.com/steinbergmedia/bravura and restart SC".throw;
@@ -79,13 +81,14 @@ SuperScore {
 		if(clefs.size<numStaves, {clefs = clefs ++ (clefs.last!(numStaves-clefs.size))});
 		clefs = clefs.collect({|i| i.asString});
 
-		auxMaxLength = durations.asArray.shape.postln;
+		//auxMaxLength = durations.asArray.shape.postln;
 		//auxLength = durations[auxMaxLength].collect({|i| i[2].abs}); //.sum*defaultSpacing;
-		("auxLength: "++auxLength).postln;
+		//("auxLength: "++auxLength).postln;
 
-		staffWidth = windowWidth.max(scale*midiNotes.shape.maxItem*defaultSpacing + 60);
-		staffWidth.postln;
-		staffHeight = windowHeight.max(staffPosition+(4*spaceInterline*numStaves)+(distanceInBetweenStaves*numStaves))*scale;
+		//staffWidth = windowWidth.max(scale*midiNotes.shape.maxItem*defaultSpacing + 60);
+		//staffWidth.postln;
+		//staffHeight = windowHeight.max(staffPosition+(4*spaceInterline*numStaves)+(distanceInBetweenStaves*numStaves))*scale;
+		this.updateCanvasSize; // this should now work better in displaying the correct window length
 		this.loadSmuflDictionary;
 		this.buildGui;
 	}
@@ -344,6 +347,19 @@ SuperScore {
 		Pen.stringAtPoint(smuflDictionary[clefType], posX@(posY-offsetY+76), Font(musicFont, 38), Color.black;);
 	}
 
+	updateCanvasSize {
+		var maxBeats = rhythms.collect({ |staffRhythms| staffRhythms.abs.sum }).maxItem;
+		var noteOriginX = 80; // same origin used in renderMusic
+		var rightMargin = 40;
+
+		staffWidth = windowWidth.max(scale * (noteOriginX + (maxBeats * defaultSpacing) + rightMargin));
+		staffHeight = windowHeight.max(staffPosition + (4 * spaceInterline * numStaves) + (distanceInBetweenStaves * numStaves)) * scale;
+
+		if(userView.notNil, {
+			userView.bounds_(Rect(0, 0, staffWidth, staffHeight));
+		});
+	}
+
 
 	loadSmuflDictionary {
 		//needs to be expanded to support 96TET
@@ -542,10 +558,10 @@ SuperScore {
 		userView.refresh;
 	}
 
+
 	setDefaultSpacing { |value|
 		defaultSpacing = value;
-		staffWidth = windowWidth.max(scale * midiNotes.shape.maxItem * defaultSpacing + 60);
-		userView.bounds_(Rect(0, 0, staffWidth, staffHeight));
+		this.updateCanvasSize;
 		userView.refresh;
 	}
 
@@ -565,8 +581,9 @@ SuperScore {
 	}
 
 	// set the view scale
-	setScale {|value|
+	setScale { |value|
 		scale = value;
+		this.updateCanvasSize;
 		userView.refresh;
 	}
 
@@ -613,17 +630,15 @@ SuperScore {
 		rhythms   = newRhythms ?? { rhythms };
 		clefs     = (newClefs ?? { clefs }).asArray;
 		distanceInBetweenStaves = 100*(clefs.maxItem.asString.size);
-		if(clefs.size<numStaves, {clefs = clefs ++ (clefs.last!(numStaves-clefs.size))});
-		clefs = clefs.collect({|i| i.asString});
 
 		midiNotes = midiNotes.asArray.fixShape;
 		numStaves = midiNotes.shape[0];
 
-		this.fixDurations;
+		if(clefs.size<numStaves, {clefs = clefs ++ (clefs.last!(numStaves-clefs.size))});
+		clefs = clefs.collect({|i| i.asString});
 
-		staffWidth = windowWidth.max(scale * midiNotes.shape.maxItem * defaultSpacing + 60);
-		staffHeight = windowHeight.max(staffPosition + (4 * spaceInterline * numStaves) + (distanceInBetweenStaves * numStaves)) * scale;
-		userView.bounds_(Rect(0, 0, staffWidth, staffHeight));
+		this.fixDurations;
+		this.updateCanvasSize;
 
 		userView.refresh;
 	}
