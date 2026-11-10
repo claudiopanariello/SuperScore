@@ -19,7 +19,8 @@ TO DO (not necessarily in this order eheh):
 - Play the roll from a given timestamp
 - Select a note from the GUI
 - Check the conversion velocities to amp (now it's .linlin)
-- Fix the way midiNotes is interpreted: when it starts with a chord, it needs some extra brackets in order to get properly recognized
+- Add bending to .eazyMIDIPlay
+- Fix the way midiNotes is interpreted: for now, when it starts with a chord, it needs some extra brackets in order to get properly recognized
 - Automatically stop the playbackline when reaches the end of the roll
 - Refactor the entire class using SuperScoreEvent !
 
@@ -511,7 +512,6 @@ SuperScore {
 					},
 					{
 						var aux = midiNotes[n][position];
-						aux.isArray.postln;
 						pitchExpanded.add(aux);
 						ampsExpanded.add(
 							if(aux.isArray.not, //if a chord, divide also for the number of notes
@@ -562,7 +562,6 @@ SuperScore {
 				},
 				{
 					var aux = midiNotes[n][position];
-					aux.isArray.postln;
 					pitchExpanded.add(aux);
 					ampsExpanded.add(
 						if(aux.isArray.not, //if a chord, divide also for the number of notes
