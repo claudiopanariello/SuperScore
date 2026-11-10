@@ -1,11 +1,11 @@
 /**********************************************************************
-▗▄▄▖▗▖ ▗▖▗▄▄▖ ▗▄▄▄▖▗▄▄▖  ▗▄▄▖ ▗▄▄▖ ▗▄▖ ▗▄▄▖ ▗▄▄▄▖
+ ▗▄▄▖▗▖ ▗▖▗▄▄▖ ▗▄▄▄▖▗▄▄▖  ▗▄▄▖ ▗▄▄▖ ▗▄▖ ▗▄▄▖ ▗▄▄▄▖
 ▐▌   ▐▌ ▐▌▐▌ ▐▌▐▌   ▐▌ ▐▌▐▌   ▐▌   ▐▌ ▐▌▐▌ ▐▌▐▌
-▝▀▚▖▐▌ ▐▌▐▛▀▘ ▐▛▀▀▘▐▛▀▚▖ ▝▀▚▖▐▌   ▐▌ ▐▌▐▛▀▚▖▐▛▀▀▘
+ ▝▀▚▖▐▌ ▐▌▐▛▀▘ ▐▛▀▀▘▐▛▀▚▖ ▝▀▚▖▐▌   ▐▌ ▐▌▐▛▀▚▖▐▛▀▀▘
 ▗▄▄▞▘▝▚▄▞▘▐▌   ▐▙▄▄▖▐▌ ▐▌▗▄▄▞▘▝▚▄▄▖▝▚▄▞▘▐▌ ▐▌▐▙▄▄▖
 
 
-SupercolliderSCoreNotationAssistant (SuperScore)
+SupercolliderSCoreNotationAssistant (SuperScore, or SScNa)
 Displaying proportional notation natively in SC (something similar to a maxmsp bach.roll)
 
 Class started on 2026-03 (but first code done in 2025)
@@ -19,7 +19,9 @@ TO DO (not necessarily in this order eheh):
 - Play the roll from a given timestamp
 - Select a note from the GUI
 - Add dynamics! Noteheads gray scale?
-- Rethink everything in terms of Events ?
+- Fix the way midiNotes is interpreted: when it starts with a chord, it needs some extra brackets in order to get properly recognized
+- Automatically stop the playbackline when reaches the end of the roll
+- Refactor the entire class using SuperScoreEvent !
 
 **********************************************************************/
 
@@ -42,6 +44,7 @@ SuperScore {
 	var <>playbackPoint = 0, pixelsPerSecond = 0, startTimePlayback = 0, playbackOffset = 0;
 	var <>scrollView;
 	var isPaused = false, pauseTime = 0, players;
+	var isPlaying = false;
 	var <>midiOut;
 
 	var distanceInBetweenStaves;
@@ -67,7 +70,7 @@ SuperScore {
 		});
 
 		if(Font.availableFonts.includesEqual("Petaluma") == false, {
-			"Bravura font is missing. Please install from https://github.com/steinbergmedia/petaluma and restart SC".throw;
+			"Petaluma font is missing. Please install from https://github.com/steinbergmedia/petaluma and restart SC".throw;
 		});
 
 		midiNotes = midiNotes.fixShape;
@@ -399,9 +402,7 @@ SuperScore {
 			\flatArrowUp -> "",
 			\flatArrowDown -> "",
 			\sharpArrowUp -> "",
-			\sharpArrowDown -> "",
-			\sharpArrowUp -> "",
-			\sharpArrowDown -> ""
+			\sharpArrowDown -> ""
 		]
 	}
 
@@ -423,9 +424,14 @@ SuperScore {
 
 	//draw playback line
 	playbackLine { |bottomY|
-		var elapsed = thisThread.seconds - startTimePlayback;
-		playbackPoint = playbackOffset + (elapsed * pixelsPerSecond);
-		scrollView.visibleOrigin_(Point((playbackPoint - (windowWidth / 2) * scale).max(0), 0));
+		var elapsed;
+		if(isPlaying and: { isPaused.not }, {
+			elapsed = thisThread.seconds - startTimePlayback;
+			playbackPoint = playbackOffset + (elapsed * pixelsPerSecond);
+			scrollView.visibleOrigin_(Point((playbackPoint - (windowWidth / 2) * scale).max(0), 0));
+		}, {
+			playbackPoint = playbackOffset;
+		});
 
 		Pen.strokeColor_(Color.new255(0, 200, 50));
 		Pen.width_(2);
@@ -458,6 +464,7 @@ SuperScore {
 		playbackOffset = 0;
 		startTimePlayback = thisThread.seconds;
 		isPaused = false;
+		isPlaying = true;
 
 		this.setBpm(bpm);
 		Server.local.waitForBoot {
@@ -474,7 +481,7 @@ SuperScore {
 						{ pitchExpanded.add(midiNotes[n][position]); position = position + 1 })
 				});
 				("Durations for Pbind:   " ++ durExpanded).postln;
-				("Pithces expanded for Pbind: " ++ pitchExpanded.asArray).postln;
+				("Pitches expanded for Pbind: " ++ pitchExpanded.asArray).postln;
 				Pbind(
 					\instrument, instrument,
 					\midinote,   Pseq(pitchExpanded.asArray, 1),
@@ -492,6 +499,7 @@ SuperScore {
 		playbackOffset = 0;
 		startTimePlayback = thisThread.seconds;
 		isPaused = false;
+		isPlaying = true;
 
 		this.setBpm(bpm);
 		//MIDIClient.destinations;
@@ -510,7 +518,7 @@ SuperScore {
 					{ pitchExpanded.add(midiNotes[n][position]); position = position + 1 })
 			});
 			// ("Durations for Pbind:   " ++ durExpanded).postln; // DEBUG
-			// ("Pithces expanded for Pbind: " ++ pitchExpanded.asArray).postln; // DEBUG
+			// ("Pitches expanded for Pbind: " ++ pitchExpanded.asArray).postln; // DEBUG
 			Pbind(
 				\type,    \midi,
 				\midiout, midiOut,
@@ -546,9 +554,12 @@ SuperScore {
 	stop {
 		players.do({ |p| p.stop });
 		userView.animate_(false);
+		isPlaying = false;
+		isPaused = false;
 		playbackPoint = 0;
 		playbackOffset = 0;
-		isPaused = false;
+		scrollView.visibleOrigin_(0@0);
+		userView.refresh;
 	}
 
 	setFont {|font = "Bravura"|
@@ -557,7 +568,6 @@ SuperScore {
 		if(musicFont== "Petaluma", {offsetY = 38});
 		userView.refresh;
 	}
-
 
 	setDefaultSpacing { |value|
 		defaultSpacing = value;
@@ -639,6 +649,7 @@ SuperScore {
 
 		this.fixDurations;
 		this.updateCanvasSize;
+		scrollView.visibleOrigin_(0@0); //for safety, to bring the scrollView back to the origin
 
 		userView.refresh;
 	}
