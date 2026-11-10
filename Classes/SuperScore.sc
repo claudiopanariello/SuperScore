@@ -18,7 +18,7 @@ TO DO (not necessarily in this order eheh):
 - Avoid collisions in chords
 - Play the roll from a given timestamp
 - Select a note from the GUI
-- Add dynamics! Noteheads gray scale?
+- Check the conversion velocities to amp (now it's .linlin)
 - Fix the way midiNotes is interpreted: when it starts with a chord, it needs some extra brackets in order to get properly recognized
 - Automatically stop the playbackline when reaches the end of the roll
 - Refactor the entire class using SuperScoreEvent !
@@ -29,13 +29,15 @@ SuperScore {
 	classvar musicFont = "Bravura";
 	classvar offsetY = 76; //<----------- IMPORTANT! For Bravura offsetY = 76; for Petaluma offsetY = 38
 
-	var <>midiNotes, <>rhythms, <>clefs, <>windowTitle, <>scale, <>defaultSpacing, <>forceAccidentals, <>showDurations, <>showStems, <>windowWidth, <>windowHeight, <>posX, <>posY, <>parent;
+	var <>midiNotes, <>rhythms, <>velocities, <>clefs, <>windowTitle, <>scale, <>defaultSpacing, <>forceAccidentals, <>showDurations, <>showStems;
+	var <>windowWidth = 500, <>windowHeight = 500, <>posX = 600, <>posY = 300, <>parent = nil;
 	var <>window, <>userView;
 	var <>durations;
 	var <>staffPosition;
 	var <>staffWidth, <> staffHeight;
 	var <>ledgerLinesBounds;
 	var <>toneDivision, majorScale;
+	var colorVelocity;
 
 	var prevNote, prevNotePosX, prevNotePosY, prevNotePosYchord;
 	var direction;
@@ -51,12 +53,11 @@ SuperScore {
 	var spaceInterline;
 	var smuflDictionary, accidentalForDeviation;
 
-	*new { |midiNotes = 60, rhythms = nil, clefs = \g, windowTitle = "Music Roll", scale = 1, defaultSpacing = 100, forceAccidentals = false, showDurations = true, showStems = true, windowWidth = 500, windowHeight = 500, posX = 600, posY = 300, parent = nil|
-		^super.newCopyArgs(midiNotes.asArray, rhythms, clefs, windowTitle, scale, defaultSpacing, forceAccidentals, showDurations, showStems, windowWidth, windowHeight, posX, posY, parent).init;
+	*new { |midiNotes = 60, rhythms = nil, velocities = 100, clefs = \g, windowTitle = "Music Roll", scale = 1, defaultSpacing = 100, forceAccidentals = false, showDurations = true, showStems = true|
+		^super.newCopyArgs(midiNotes.asArray, rhythms, velocities, clefs, windowTitle, scale, defaultSpacing, forceAccidentals, showDurations, showStems).init;
 	}
 
 	init {
-		//var auxMaxLength, auxLength;
 		staffPosition = 200;
 		spaceInterline = 10;
 		toneDivision = 8; // or 16 for 96TET, etc.
@@ -77,6 +78,7 @@ SuperScore {
 		numStaves = midiNotes.shape[0];
 		format("There are % staves in total.", numStaves).postln;
 		this.fixDurations;
+		this.fixVelocities;
 
 		//fix clefs: I need an array of numStaves elements, all strings
 		clefs = clefs.asArray;
@@ -94,6 +96,15 @@ SuperScore {
 		this.updateCanvasSize; // this should now work better in displaying the correct window length
 		this.loadSmuflDictionary;
 		this.buildGui;
+	}
+
+	buildGui {
+		this.createWindow(windowTitle);
+		userView = UserView.new(scrollView, staffWidth@staffHeight)
+		.background_(Color.gray(0.9));
+		userView.resize = 5;
+		userView.drawFunc = { this.renderMusic };
+		CmdPeriod.add(this);
 	}
 
 	createWindow { |title|
@@ -114,6 +125,19 @@ SuperScore {
 		});
 	}
 
+	fixVelocities {
+		if(velocities.isNil or: {velocities.size==0}, {
+			var auxValue = velocities ?? 100;
+			velocities = List.new;
+			numStaves.do({|n|
+				velocities.add(midiNotes[n].collect({ auxValue }));
+			});
+			velocities = velocities.asArray;
+		});
+		//velocities = velocities.clipExtend(midiNotes[n].size);
+		velocities = velocities.fixShape;
+	}
+
 	fixDurations {
 		//brutal way to create a rhythms array identical to midiNotes but filled with 1s (or the given value, only if it's ONE value)
 		if(rhythms.isNil or: {rhythms.size==0}, {
@@ -123,7 +147,7 @@ SuperScore {
 				rhythms.add(midiNotes[n].collect({ auxValue }));
 			});
 			rhythms = rhythms.asArray;
-			rhythms.postln;
+			//rhythms.postln;
 		});
 
 		rhythms = rhythms.fixShape;
@@ -153,16 +177,16 @@ SuperScore {
 				if(event.isArray,
 					{
 						event.sort; //just to make sure
-						event.do({|item| this.addNote(item, posX, offsetStaff, durs[idx][2]*defaultSpacing)})},
+						event.do({|item| this.addNote(item, posX, offsetStaff, durs[idx][2]*defaultSpacing, velocities[n][idx])})},
 					{
-						this.addNote(event, posX, offsetStaff, durs[idx][2]*defaultSpacing)}
+						this.addNote(event, posX, offsetStaff, durs[idx][2]*defaultSpacing, velocities[n][idx])}
 				);
 			});
 		});
 		this.playbackLine(ledgerLinesBounds[0][3]);
 	}
 
-	addNote {|inputNote = 66, posX, offsetStaff = 0, currentDuration = 0|  // f#4, space 235+accidental
+	addNote {|inputNote = 66, posX, offsetStaff = 0, currentDuration = 0, currentVelocity|  // f#4, space 235+accidental
 		var stepsPerSemitone = (toneDivision * 0.5).asInteger;
 		var stepsPerOctave   = 12 * stepsPerSemitone;
 		var absStep          = (inputNote * stepsPerSemitone).round.asInteger; // 48TET step from MIDI 0
@@ -208,13 +232,16 @@ SuperScore {
 		}
 		);
 		*/
+
+		colorVelocity = Color.gray(currentVelocity.linlin(1, 127, 0.7, 0.0)); // velocity needs to be mapped to gray scale
+		// this affects noteheads, accidental, stems, ledger lines, and duration line
 		if(showDurations==true, {this.addDurationLine(posX, posY, currentDuration;)});
 
 		Pen.stringAtPoint(
 			smuflDictionary[\noteShapeRoundBlack],
 			(posX-7)@(posY-offsetY),
 			Font(musicFont, 38),
-			Color.black;
+			colorVelocity;
 		);
 
 		// add ledger lines (if needed)
@@ -233,12 +260,12 @@ SuperScore {
 			if(prevPosY != posY and: {deviation==0}, {
 				deviation = 9999})
 		});
-		Pen.stringAtPoint(accidentalForDeviation[deviation], (posX-21)@(posY-offsetY), Font(musicFont, 38), Color.black;);
+		Pen.stringAtPoint(accidentalForDeviation[deviation], (posX-21)@(posY-offsetY), Font(musicFont, 38), colorVelocity;);
 	}
 
 	addStem {|posX, posY, prevPosY|
 		if(prevPosY.isNil, {prevPosY = posY});
-		Pen.strokeColor_(Color.black);
+		Pen.strokeColor_(colorVelocity);
 		Pen.width_(1);
 		Pen.line(
 			Point(posX-7, posY),
@@ -248,7 +275,7 @@ SuperScore {
 	}
 
 	addDurationLine {|posX, posY, dur|
-		Pen.strokeColor_(Color.black);
+		Pen.strokeColor_(colorVelocity);
 		Pen.width_(4);
 		Pen.line(
 			Point(posX, posY),
@@ -293,7 +320,7 @@ SuperScore {
 		if(num > 0, {
 			num.do({|idx|
 				var lineY = staffTopY - ((1 + idx) * spaceInterline);
-				Pen.strokeColor_(Color.black);
+				Pen.strokeColor_(colorVelocity);
 				Pen.width_(1);
 				Pen.line(Point(posX - spaceInterline, lineY), Point(posX + spaceInterline, lineY));
 				Pen.stroke;
@@ -301,7 +328,7 @@ SuperScore {
 		}, {
 			num.abs.do({|idx|
 				var lineY = staffBottomY + ((1 + idx) * spaceInterline);
-				Pen.strokeColor_(Color.black);
+				Pen.strokeColor_(colorVelocity);
 				Pen.width_(1);
 				Pen.line(Point(posX - spaceInterline, lineY), Point(posX + spaceInterline, lineY));
 				Pen.stroke;
@@ -475,18 +502,31 @@ SuperScore {
 					if(d < 0, {Rest(d.abs)}, {d})
 				});
 				var pitchExpanded = List.new;
+				var ampsExpanded = List.new;
 				var position = 0;
 				rhythms[n].do({ |d|
-					if(d < 0, { pitchExpanded.add(Rest()) },
-						{ pitchExpanded.add(midiNotes[n][position]); position = position + 1 })
+					if(d < 0, {
+						pitchExpanded.add(Rest());
+						ampsExpanded.add(0)
+					},
+					{
+						var aux = midiNotes[n][position];
+						aux.isArray.postln;
+						pitchExpanded.add(aux);
+						ampsExpanded.add(
+							if(aux.isArray.not, //if a chord, divide also for the number of notes
+								{velocities[n][position]/127}, {velocities[n][position]/aux.size/127}));
+						position = position + 1;
+					})
 				});
 				("Durations for Pbind:   " ++ durExpanded).postln;
 				("Pitches expanded for Pbind: " ++ pitchExpanded.asArray).postln;
+				("Velocities converted in amps for Pbind: " ++ ampsExpanded.asArray).postln;
 				Pbind(
 					\instrument, instrument,
 					\midinote,   Pseq(pitchExpanded.asArray, 1),
 					\dur,        Pseq(durExpanded, 1),
-					\amp,        0.5 / numStaves,
+					\amp,        Pseq(ampsExpanded.asArray / numStaves),
 					\legato,     0.8
 				).play;
 			});
@@ -511,11 +551,24 @@ SuperScore {
 			var durExpanded = rhythms[n].collect({ |d|
 				if(d < 0, {Rest(d.abs)}, {d})
 			});
+
 			var pitchExpanded = List.new;
+			var ampsExpanded = List.new;
 			var position = 0;
 			rhythms[n].do({ |d|
-				if(d < 0, { pitchExpanded.add(Rest()) },
-					{ pitchExpanded.add(midiNotes[n][position]); position = position + 1 })
+				if(d < 0, {
+					pitchExpanded.add(Rest());
+					ampsExpanded.add(0)
+				},
+				{
+					var aux = midiNotes[n][position];
+					aux.isArray.postln;
+					pitchExpanded.add(aux);
+					ampsExpanded.add(
+						if(aux.isArray.not, //if a chord, divide also for the number of notes
+							{velocities[n][position]/127}, {velocities[n][position]/aux.size/127}));
+					position = position + 1;
+				})
 			});
 			// ("Durations for Pbind:   " ++ durExpanded).postln; // DEBUG
 			// ("Pitches expanded for Pbind: " ++ pitchExpanded.asArray).postln; // DEBUG
@@ -524,7 +577,7 @@ SuperScore {
 				\midiout, midiOut,
 				\midinote,   Pseq(pitchExpanded.asArray, 1),
 				\dur,        Pseq(durExpanded, 1),
-				\amp,        0.66 / numStaves,
+				\amp,        Pseq(ampsExpanded.asArray / numStaves),
 				\sustain,    Pseq(durExpanded, 1)
 			).play;
 		});
@@ -619,6 +672,11 @@ SuperScore {
 		^rhythms;
 	}
 
+	// get all the velocities as array
+	getVelocities {
+		^velocities;
+	}
+
 	exportToOM {|fileName|
 		fileName = fileName ? windowTitle;
 		if (SuperOM.isNil) {
@@ -635,9 +693,10 @@ SuperScore {
 	// update with new music
 	// since a lot of preprocessing is done in .init and not in .renderMusic, I have to re-run a bunch of lines
 	// Not sure this is the best way to do it, but anyway, it works for now
-	updateMusic { |newPitches, newRhythms, newClefs|
+	updateMusic { |newPitches, newRhythms, newVelocities, newClefs|
 		midiNotes = newPitches ?? { midiNotes };
 		rhythms   = newRhythms ?? { rhythms };
+		velocities   = newVelocities ?? { velocities };
 		clefs     = (newClefs ?? { clefs }).asArray;
 		distanceInBetweenStaves = 100*(clefs.maxItem.asString.size);
 
@@ -648,6 +707,7 @@ SuperScore {
 		clefs = clefs.collect({|i| i.asString});
 
 		this.fixDurations;
+		this.fixVelocities;
 		this.updateCanvasSize;
 		scrollView.visibleOrigin_(0@0); //for safety, to bring the scrollView back to the origin
 
@@ -656,15 +716,6 @@ SuperScore {
 
 	refresh {
 		userView.refresh; // Redraw
-	}
-
-	buildGui {
-		this.createWindow(windowTitle);
-		userView = UserView.new(scrollView, staffWidth@staffHeight)
-		.background_(Color.gray(0.9));
-		userView.resize = 5;
-		userView.drawFunc = { this.renderMusic };
-		CmdPeriod.add(this);
 	}
 
 	cmdPeriod {
