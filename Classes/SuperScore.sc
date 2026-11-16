@@ -1,7 +1,7 @@
 /**********************************************************************
- ▗▄▄▖▗▖ ▗▖▗▄▄▖ ▗▄▄▄▖▗▄▄▖  ▗▄▄▖ ▗▄▄▖ ▗▄▖ ▗▄▄▖ ▗▄▄▄▖
+▗▄▄▖▗▖ ▗▖▗▄▄▖ ▗▄▄▄▖▗▄▄▖  ▗▄▄▖ ▗▄▄▖ ▗▄▖ ▗▄▄▖ ▗▄▄▄▖
 ▐▌   ▐▌ ▐▌▐▌ ▐▌▐▌   ▐▌ ▐▌▐▌   ▐▌   ▐▌ ▐▌▐▌ ▐▌▐▌
- ▝▀▚▖▐▌ ▐▌▐▛▀▘ ▐▛▀▀▘▐▛▀▚▖ ▝▀▚▖▐▌   ▐▌ ▐▌▐▛▀▚▖▐▛▀▀▘
+▝▀▚▖▐▌ ▐▌▐▛▀▘ ▐▛▀▀▘▐▛▀▚▖ ▝▀▚▖▐▌   ▐▌ ▐▌▐▛▀▚▖▐▛▀▀▘
 ▗▄▄▞▘▝▚▄▞▘▐▌   ▐▙▄▄▖▐▌ ▐▌▗▄▄▞▘▝▚▄▄▖▝▚▄▞▘▐▌ ▐▌▐▙▄▄▖
 
 
@@ -30,18 +30,17 @@ SuperScore {
 	classvar musicFont = "Bravura";
 	classvar offsetY = 76; //<----------- IMPORTANT! For Bravura offsetY = 76; for Petaluma offsetY = 38
 
-	var <>midiNotes, <>rhythms, <>velocities, <>clefs, <>windowTitle, <>scale, <>defaultSpacing, <>forceAccidentals, <>showDurations, <>showStems;
+	var <>midiNotes, <>rhythms, <>velocities, <>clefs, <>windowTitle, <>scale, <>defaultSpacing, <>forceAccidentals, <>showDurations, <>showStems, <>accidentalMode;
 	var <>windowWidth = 500, <>windowHeight = 500, <>posX = 600, <>posY = 300, <>parent = nil;
 	var <>window, <>userView;
 	var <>durations;
 	var <>staffPosition;
 	var <>staffWidth, <> staffHeight;
 	var <>ledgerLinesBounds;
-	var <>toneDivision, majorScale;
+	var <>toneDivision, majorScale, diatonicSteps;
 	var colorVelocity;
 
 	var prevNote, prevNotePosX, prevNotePosY, prevNotePosYchord;
-	var direction;
 	var numStaves;
 	var tempoBpm = 60;
 	var <>playbackPoint = 0, pixelsPerSecond = 0, startTimePlayback = 0, playbackOffset = 0;
@@ -52,17 +51,17 @@ SuperScore {
 
 	var distanceInBetweenStaves;
 	var spaceInterline;
-	var smuflDictionary, accidentalForDeviation;
 
-	*new { |midiNotes = 60, rhythms = nil, velocities = 100, clefs = \g, windowTitle = "Music Roll", scale = 1, defaultSpacing = 100, forceAccidentals = false, showDurations = true, showStems = true|
-		^super.newCopyArgs(midiNotes.asArray, rhythms, velocities, clefs, windowTitle, scale, defaultSpacing, forceAccidentals, showDurations, showStems).init;
+	*new { |midiNotes = 60, rhythms = nil, velocities = 100, clefs = \g, windowTitle = "Music Roll", scale = 1, defaultSpacing = 100, forceAccidentals = false, showDurations = true, showStems = true, accidentalMode = \nearest|
+		^super.newCopyArgs(midiNotes.asArray, rhythms, velocities, clefs, windowTitle, scale, defaultSpacing, forceAccidentals, showDurations, showStems, accidentalMode).init;
 	}
 
 	init {
 		staffPosition = 200;
 		spaceInterline = 10;
-		toneDivision = 8; // or 16 for 96TET, etc.
-		majorScale = Scale.major.degrees*(toneDivision*0.5);
+		toneDivision = 16; // 96TET
+		majorScale = Scale.major.degrees*(toneDivision div:2); // integer division
+		diatonicSteps = majorScale ++ [12 * (toneDivision div: 2)]; // one full octave
 
 		MIDIClient.initialized.not.if { MIDIClient.init };
 		MIDIIn.connectAll;
@@ -74,6 +73,10 @@ SuperScore {
 		if(Font.availableFonts.includesEqual("Petaluma") == false, {
 			"Petaluma font is missing. Please install from https://github.com/steinbergmedia/petaluma and restart SC".throw;
 		});
+
+		if([\nearest, \allSharp].includes(accidentalMode).not) {
+			^"accidentalMode must be \\nearest or \\allSharp".warn;
+		};
 
 		midiNotes = midiNotes.fixShape;
 		numStaves = midiNotes.shape[0];
@@ -87,15 +90,9 @@ SuperScore {
 		if(clefs.size<numStaves, {clefs = clefs ++ (clefs.last!(numStaves-clefs.size))});
 		clefs = clefs.collect({|i| i.asString});
 
-		//auxMaxLength = durations.asArray.shape.postln;
-		//auxLength = durations[auxMaxLength].collect({|i| i[2].abs}); //.sum*defaultSpacing;
-		//("auxLength: "++auxLength).postln;
-
-		//staffWidth = windowWidth.max(scale*midiNotes.shape.maxItem*defaultSpacing + 60);
-		//staffWidth.postln;
-		//staffHeight = windowHeight.max(staffPosition+(4*spaceInterline*numStaves)+(distanceInBetweenStaves*numStaves))*scale;
 		this.updateCanvasSize; // this should now work better in displaying the correct window length
-		this.loadSmuflDictionary;
+		//this.loadSMuFLDictionary;
+		SScNAGlyphs.load(Platform.userExtensionDir +/+ "cpClasses/SScNa/SMuFL_fonts_json/glyphnames.json");
 		this.buildGui;
 	}
 
@@ -170,59 +167,63 @@ SuperScore {
 			var durs = durations[n].select({|item| item[1]==false}); //strip all the rests
 			this.drawStaff(offsetStaff, clefs[n]);
 			//format("Stave n.% has % events", n+1, currentStave.size).postln;
+			prevNote = nil;
 			prevNotePosY = nil;
 			currentStave.do({|event, idx|
 				var posX;
 				prevNotePosYchord = nil;
 				posX = 80 + (durs[idx][0] * defaultSpacing);
-				if(event.isArray,
-					{
-						event.sort; //just to make sure
-						event.do({|item| this.addNote(item, posX, offsetStaff, durs[idx][2]*defaultSpacing, velocities[n][idx])})},
-					{
-						this.addNote(event, posX, offsetStaff, durs[idx][2]*defaultSpacing, velocities[n][idx])}
-				);
+				if(event.isArray, {
+					event.copy.sort({ |a, b| a.abs < b.abs }).do({|item|
+						this.addNote(item, posX, offsetStaff, durs[idx][2]*defaultSpacing, velocities[n][idx])
+					})
+				}, {
+					this.addNote(event, posX, offsetStaff, durs[idx][2]*defaultSpacing, velocities[n][idx])
+				});
 			});
 		});
 		this.playbackLine(ledgerLinesBounds[0][3]);
 	}
 
-	addNote {|inputNote = 66, posX, offsetStaff = 0, currentDuration = 0, currentVelocity|  // f#4, space 235+accidental
-		var stepsPerSemitone = (toneDivision * 0.5).asInteger;
+	addNote {|inputNote = 66, posX, offsetStaff = 0, currentDuration = 0, currentVelocity|
+		var pitch            = inputNote.abs;
+		var stepsPerSemitone = toneDivision div: 2;
 		var stepsPerOctave   = 12 * stepsPerSemitone;
-		var absStep          = (inputNote * stepsPerSemitone).round.asInteger; // 48TET step from MIDI 0
+		var absStep          = (pitch * stepsPerSemitone).round.asInteger;
 		var octave           = (absStep div: stepsPerOctave) - 1;
-		var step48           = absStep % stepsPerOctave;
-		var posY, ledgerLines = 0;
+		var step96           = absStep % stepsPerOctave;
+		var nearestDiatonicStep, deviation, posY, index;
 
-		// direction awareness to pick the sharp or flat accident
-		var direction, directionChoice, nearestDiatonicStep, deviation;
-		var minInterval = 0.5; // quartertone, in semitones
-		var maxDeviation = 4; // half a tone in 48TET steps
-		var interval = if(prevNote.notNil, { (inputNote - prevNote).abs }, { 0 });
+		if(accidentalMode == \nearest){
+			nearestDiatonicStep = step96.nearestInList(diatonicSteps) }
+		{ nearestDiatonicStep = diatonicSteps[diatonicSteps.indexInBetween(step96).floor] };
+		deviation = step96 - nearestDiatonicStep;
 
-		direction = if(prevNote.notNil && (interval >= minInterval), {
-			if(inputNote > prevNote, { \ascending },
-				if(inputNote < prevNote, { \descending },
-					{ \unison }))
-		}, { \unison });
+		// if inputNote is negative then it picks the enharmonic
+		if(inputNote < 0 ) {
+			index = diatonicSteps.indexOf(nearestDiatonicStep) + deviation.sign;
+			nearestDiatonicStep = diatonicSteps[index];
+			deviation = step96 - nearestDiatonicStep;
+		};
 
-		directionChoice = switch(direction,
-			\ascending,  { majorScale.select{ |x| x <= step48 }.last ?? { majorScale[0] } },
-			\descending, { majorScale.detect{ |x| x >= step48 } ?? { majorScale.last } },
-			\unison,     { step48.nearestInList(majorScale) }
-		);
-
-		nearestDiatonicStep = if((step48 - directionChoice).abs <= maxDeviation,
-			{ directionChoice },
-			{ step48.nearestInList(majorScale) }
-		);
-
-		deviation = step48 - nearestDiatonicStep;
-
-		// posY from scale degree index
-		posY = staffPosition + 50 - (majorScale.indexOf(nearestDiatonicStep) * 5);
+		posY = staffPosition + 50 - (diatonicSteps.indexOf(nearestDiatonicStep) * 5);
 		posY = posY + (35 * (4 - octave)) + offsetStaff;
+
+		// velocity mapped to gray scale
+		colorVelocity = Color.gray(currentVelocity.linlin(1, 127, 0.7, 0.0));
+		// this affects noteheads, accidental, stems, ledger lines, and duration line
+		if(showDurations) { this.addDurationLine(posX, posY, currentDuration) };
+
+		Pen.stringAtPoint(
+			SScNAGlyphs.at(\noteShapeRoundBlack),
+			(posX-7)@(posY-offsetY),
+			Font(musicFont, 38),
+			colorVelocity
+		);
+
+		this.checkLedgerLine(pitch, posX, posY); // abs pitch!
+		this.addAccidental(deviation, posX, posY, prevNotePosY);
+		if(showStems) { this.addStem(posX, posY, prevNotePosYchord) };
 
 		// check and resolve collisions: TO BE DONE
 		/*
@@ -234,23 +235,7 @@ SuperScore {
 		);
 		*/
 
-		colorVelocity = Color.gray(currentVelocity.linlin(1, 127, 0.7, 0.0)); // velocity needs to be mapped to gray scale
-		// this affects noteheads, accidental, stems, ledger lines, and duration line
-		if(showDurations==true, {this.addDurationLine(posX, posY, currentDuration;)});
-
-		Pen.stringAtPoint(
-			smuflDictionary[\noteShapeRoundBlack],
-			(posX-7)@(posY-offsetY),
-			Font(musicFont, 38),
-			colorVelocity;
-		);
-
-		// add ledger lines (if needed)
-		this.checkLedgerLine(inputNote, posX, posY);
-		this.addAccidental(deviation, posX, posY, prevNotePosY);
-		if(showStems==true, {this.addStem(posX, posY, prevNotePosYchord)});
-
-		prevNote = inputNote;
+		prevNote = pitch; // abs pitch!
 		prevNotePosX = posX;
 		prevNotePosY = posY;
 		prevNotePosYchord = posY;
@@ -259,9 +244,9 @@ SuperScore {
 	addAccidental {|deviation, posX, posY, prevPosY|
 		if(forceAccidentals == false, {
 			if(prevPosY != posY and: {deviation==0}, {
-				deviation = 9999})
+				deviation = nil})
 		});
-		Pen.stringAtPoint(accidentalForDeviation[deviation], (posX-21)@(posY-offsetY), Font(musicFont, 38), colorVelocity;);
+		Pen.stringAtPoint(SScNAGlyphs.accidental(deviation), (posX-21)@(posY-offsetY), Font(musicFont, 38), colorVelocity;);
 	}
 
 	addStem {|posX, posY, prevPosY|
@@ -343,25 +328,25 @@ SuperScore {
 		ledgerLinesBounds = List.new; // Each entry: [midiLow, midiHigh, staffTopY, staffBottomY]
 
 		if(treble>1, {
-			this.addSingleStaff(-70+offsetStaff, -70+offsetStaff, \trebleClef15);
+			this.addSingleStaff(-70+offsetStaff, -70+offsetStaff, \gClef15ma);
 			ledgerLinesBounds.add([86, 102, staffPosition-70+offsetStaff, staffPosition-70+(4*spaceInterline)+offsetStaff]);
 		});
 		if(treble>0, {
-			this.addSingleStaff(0+offsetStaff, 0+offsetStaff, \trebleClef);
+			this.addSingleStaff(0+offsetStaff, 0+offsetStaff, \gClef);
 			ledgerLinesBounds.add([62, 80, staffPosition+offsetStaff, staffPosition+(4*spaceInterline)+offsetStaff]);
 		});
 		if(bass>0, {
-			this.addSingleStaff(60+offsetStaff, 40+offsetStaff, \bassClef);
+			this.addSingleStaff(60+offsetStaff, 40+offsetStaff, \fClef);
 			ledgerLinesBounds.add([41, 59, staffPosition+60+offsetStaff, staffPosition+60+(4*spaceInterline)+offsetStaff]);
 		});
 		if(bass>1, {
-			this.addSingleStaff(130+offsetStaff, 110+offsetStaff, \bassClef15);
+			this.addSingleStaff(130+offsetStaff, 110+offsetStaff, \fClef15mb);
 			ledgerLinesBounds.add([17, 35, staffPosition+130+offsetStaff, staffPosition+130+(4*spaceInterline)+offsetStaff]);
 		});
 		ledgerLinesBounds = ledgerLinesBounds.sort({|a,b| a[0] < b[0]}).asArray;
 	}
 
-	addSingleStaff {arg offset = 0, clefOffset = 0, clefType = \trebleClef;
+	addSingleStaff {arg offset = 0, clefOffset = 0, clefType = \gClef;
 		5.do({|v, idx|
 			Pen.strokeColor_(Color.black);
 			Pen.width_(1);
@@ -374,8 +359,8 @@ SuperScore {
 		this.addClef(5, staffPosition-46+clefOffset, clefType);
 	}
 
-	addClef {arg posX, posY, clefType = \trebleClef;
-		Pen.stringAtPoint(smuflDictionary[clefType], posX@(posY-offsetY+76), Font(musicFont, 38), Color.black;);
+	addClef {arg posX, posY, clefType = \gClef;
+		Pen.stringAtPoint(SScNAGlyphs.at(clefType), posX@(posY-offsetY+76), Font(musicFont, 38), Color.black;);
 	}
 
 	updateCanvasSize {
@@ -389,49 +374,6 @@ SuperScore {
 		if(userView.notNil, {
 			userView.bounds_(Rect(0, 0, staffWidth, staffHeight));
 		});
-	}
-
-
-	loadSmuflDictionary {
-		//needs to be expanded to support 96TET
-		accidentalForDeviation = Dictionary[
-			-4 -> "",
-			-3 -> "",
-			-2 -> "",
-			-1 -> "",
-			0 -> "",
-			1 -> "",
-			2 -> "",
-			3 -> "",
-			4 -> "",
-			9999 -> "",
-		];
-		smuflDictionary = Dictionary[
-			//noteheads
-			\noteShapeRoundBlack -> "",
-			\noteShapeDiamondWhite ->"",
-			\noteShapeDiamondBlack ->"",
-			\textBlackNoteLongStem -> "",
-			\noteQuarterDown -> "",
-
-			//clefs
-			\trebleClef15 -> "",
-			\trebleClef -> "",
-			\bassClef -> "",
-			\bassClef15 -> "", //careful: looks like there's nothing, but the glyph is there!
-
-			//accidentals
-			\flat -> "",
-			\sharp -> "",
-			\natural -> "",
-			\quarterToneFlat -> "",
-			\quarterToneSharp -> "",
-			\threeQuarterTonesSharp -> "",
-			\flatArrowUp -> "",
-			\flatArrowDown -> "",
-			\sharpArrowUp -> "",
-			\sharpArrowDown -> ""
-		]
 	}
 
 	//export pitches as string for bach: TO BE DONE
@@ -512,7 +454,7 @@ SuperScore {
 					},
 					{
 						var aux = midiNotes[n][position];
-						pitchExpanded.add(aux);
+						pitchExpanded.add(aux.abs);
 						ampsExpanded.add(
 							if(aux.isArray.not, //if a chord, divide also for the number of notes
 								{velocities[n][position]/127}, {velocities[n][position]/aux.size/127}));
@@ -562,7 +504,7 @@ SuperScore {
 				},
 				{
 					var aux = midiNotes[n][position];
-					pitchExpanded.add(aux);
+					pitchExpanded.add(aux.abs);
 					ampsExpanded.add(
 						if(aux.isArray.not, //if a chord, divide also for the number of notes
 							{velocities[n][position]/127}, {velocities[n][position]/aux.size/127}));
@@ -642,6 +584,15 @@ SuperScore {
 		userView.refresh;
 	}
 
+	// choose between the two accidentals mode
+	setAccidentalMode { |mode = \nearest|
+		if([\nearest, \allSharp].includes(mode).not) {
+			"accidentalMode must be \\nearest or \\allSharp".warn;
+		};
+		accidentalMode = mode;
+		userView.refresh;
+	}
+
 	// set the view scale
 	setScale { |value|
 		scale = value;
@@ -684,9 +635,27 @@ SuperScore {
 
 		SuperOM.new.writeOMfile(
 			fileName: fileName++".omi",
-			midicents: this.getPitches*100, //default SuperOM is in midicents, while SuperScore is in midi
+			midicents: this.getPitches.abs*100, //default SuperOM is in midicents, while SuperScore is in midi
 			rhythmTree: this.getRhythms
 		)
+	}
+
+	exportToLilyPond {|fileName|
+		fileName = fileName ? windowTitle;
+		if (Fosc.isNil) {
+			"Fosc is missing. Please install from https://github.com/prko/fosc/tree/master".throw;
+		};
+		"Still working on it... :)".warn;
+
+		/*
+		I guess the good idea would be to iterate over all the SuperScoreEvents, turn them into different FoscNotes
+		Group them in SuperScoreStaffs (I should build this class as well)
+		and then
+		a = FoscVoice([FoscNote("c'", 1/4), FoscNote("d'", 1/8)]);
+		b = FoscVoice([FoscNote("bf", 1/8), FoscNote("af", 1/4)]);
+		c = FoscScore([FoscStaff([a]), FoscStaff([b])]);
+		c.show;
+		*/
 	}
 
 	// update with new music
