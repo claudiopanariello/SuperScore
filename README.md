@@ -25,8 +25,9 @@ SuperScore requires these fonts, which are not included in this repository:
 
 Install them system-wide, then restart SuperCollider.
 
-For a smoother handling of the glyphs, SuperScore also requires `MITHUnicode`, available here:
-- https://github.com/ludions/scbook-2nd-edn/tree/main/26.2
+For a smoother handling of the glyphs, SuperScore also requires `MITHUnicode`, available [here](https://github.com/ludions/scbook-2nd-edn/tree/main/26.2). It will need json files of the glyphs as well (these are included in this repository).
+
+**CAVEAT**: if `MITHUnicode` is not installed, SuperScore will try to load the (a selection of) the glyphs the hard way.
 
 ## License
 
