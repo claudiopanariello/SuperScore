@@ -2,7 +2,7 @@
 
 > A class for displaying proportional notation natively in SuperCollider.
 >
-<img src="https://github.com/claudiopanariello/SuperScore/blob/main/example.png" width="100" height="100">
+<img src="https://github.com/claudiopanariello/SuperScore/blob/main/example.png" width="300" height="300">
 
 ## Quickstart
 
