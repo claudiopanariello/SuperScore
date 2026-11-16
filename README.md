@@ -1,6 +1,8 @@
 # SuperScore
 
 > A class for displaying proportional notation natively in SuperCollider.
+>
+![score_example](example.png){width=40%}
 
 ## Quickstart
 
