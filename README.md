@@ -25,6 +25,9 @@ SuperScore requires these fonts, which are not included in this repository:
 
 Install them system-wide, then restart SuperCollider.
 
+For a smoother handling of the glyphs, SuperScore also requires `MITHUnicode`, available here:
+- https://github.com/ludions/scbook-2nd-edn/tree/main/26.2
+
 ## License
 
 SuperScore is licensed under the GNU General Public License v3.0 or later (GPL-3.0-or-later). See [LICENSE](LICENSE).
