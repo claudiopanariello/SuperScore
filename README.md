@@ -21,7 +21,7 @@ thisProcess.recompile;
 SuperScore requires these fonts, which are not included in this repository:
 
 - [Bravura](https://github.com/steinbergmedia/bravura)
-- [Petaluma](https://github.com/steinbergmedia/petaluma)
+- [Petaluma](https://github.com/steinbergmedia/petaluma) (if you want a jazz-like font)
 
 Install them system-wide, then restart SuperCollider.
 
